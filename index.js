@@ -112,51 +112,76 @@ function tttButton(text, action_id, value) {
 }
 
 function tttBlocks(game) {
-    const winner = tttWinner(game.board);
-    const playerX = `<@${game.playerX}>`;
-    const playerO = game.playerO ?`<@${game.playerO}>` : "Bot";
+  const winner = tttWinner(game.board);
+  const playerX = `<@${game.playerX}>`;
+  const playerO = game.playerO ? `<@${game.playerO}>` : "Bot";
 
-    let status;
+  let status;
 
-    if (winner === "draw") {
-        status = "Its a draw again T-T";
-    } else if (winner === "X") {
-        status = `${playerX} Wins!`;
-    } else if (winner === "O") {
-        status = `${playerO} Wins!`;
-    } else {
-        status = `${game.turn === "X" ? playerX : playerO}`;
-    }
+  if (winner === "draw") {
+    status = "Its a draw again T-T";
+} else if (winner === "X") {
+    status = `${playerX} Wins!`;
+  } else if (winner === "O") {
+    status = `${playerO} Wins!`;
+  } else {
+    status = `${game.turn === "X" ? playerX : playerO} is playing`;
+  }
+
+  const cells = game.board.map((cell, index) => {
+    return cell || String(index + 1);
+  });
+
+  const boardText =
+    `${cells[0]} | ${cells[1]} | ${cells[2]}\n` +
+    `--+---+--\n` +
+    `${cells[3]} | ${cells[4]} | ${cells[5]}\n` +
+    `--+---+--\n` +
+    `${cells[6]} | ${cells[7]} | ${cells[8]}`;
 
   const blocks = [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*Nixi-Bot Tic-Tac-Toe*\n\nX ${playerX}\nO ${playerO}\n\n${status}`
-}
+        text:
+          `*Nixi-Bot Tic-Tac-Toe*\n\n` +
+          `X ${playerX}\nO ${playerO}\n\n` +
+          "```" + boardText + "```\n" +
+          status
+      }
     }
   ];
 
-  for (let row = 0; row < 3; row++) {
-    const elements = [];
+  if (!winner) {
+    const options = game.board
+      .map((cell, index) => {
+        if (cell !== null) return null;
 
-    for (let col = 0; col < 3; col++) {
-      const index = row * 3 + col;
-      const symbol = game.board[index];
-
-      elements.push(
-        tttButton(
-          symbol === "X" ? "X" : symbol === "O" ? "O" : "□",
-          `nixi_ttt_cell_${index}`,
-          game.id)
-      );
-    }
+        return {
+          text: {
+            type: "plain_text",
+            text: `Field ${index + 1}`
+          },
+          value: `${game.id}:${index}`
+        };
+      })
+      .filter(Boolean);
 
     blocks.push({
       type: "actions",
-      block_id: `ttt_${game.id}_${game.version}_${row}`,
-      elements
+      block_id: `ttt_select_${game.id}_${game.version}`,
+      elements: [
+        {
+          type: "static_select",
+          action_id: "nixi_ttt_choose_cell",
+          placeholder: {
+            type: "plain_text",
+            text: "Choose a field"
+          },
+          options
+        }
+      ]
     });
   }
 
@@ -295,17 +320,22 @@ app.action("nixi_ttt_multiplayer", async ({ ack, body, action, client, respond }
   }
 });
 
-app.action(/^nixi_ttt_cell_[0-8]$/, async ({ ack, body, action, client }) => {
+app.action("nixi_ttt_choose_cell", async ({ ack, body, action, client }) => {
   await ack();
 
-  const game = tttGames.get(action.value);
+  const selection = action.selected_option?.value;
+  if (!selection) return;
+
+  const [gameId, indexText] = selection.split(":");
+  const game = tttGames.get(gameId);
+
   if (!game || !game.ts || game.busy) return;
 
-  const index = Number(action.action_id.split("_").pop());
+  const index = Number(indexText);
   const user = body.user.id;
-  const winner = tttWinner(game.board);
 
-  if (winner || game.board[index] !== null) return;
+  if (!Number.isInteger(index) || index < 0 || index > 8) return;
+  if (tttWinner(game.board) || game.board[index] !== null) return;
 
   const currentPlayer = game.turn === "X"
     ? game.playerX    : game.playerO;
